@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>時間診斷師 v1.0.2</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF7;
+    --ink: #1F2937;
+    --ink-soft: #4B5563;
+    --line: #E5E7EB;
+    --line-soft: #F3F4F6;
+    --accent: #B91C1C;
+    --depth-deep: #DC2626;
+    --depth-medium: #EA580C;
+    --depth-shallow: #2563EB;
+    --depth-rest: #16A34A;
+    --depth-blocker: #9333EA;
+    --depth-noise: #6B7280;
+    --depth-empty: #F3F4F6;
+  }
+  body {
+    font-family: 'Noto Sans TC', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-serif-tc { font-family: 'Noto Serif TC', serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .card {
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .card:active { transform: scale(0.96); }
+  .card-empty {
+    background: white;
+    border: 1.5px dashed #D1D5DB;
+  }
+  .card-empty:hover { border-color: var(--ink); }
+  .card-deep { background: var(--depth-deep); color: white; }
+  .card-medium { background: var(--depth-medium); color: white; }
+  .card-shallow { background: var(--depth-shallow); color: white; }
+  .card-rest { background: var(--depth-rest); color: white; }
+  .card-blocker { background: var(--depth-blocker); color: white; }
+  .card-noise { background: var(--depth-noise); color: white; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1.5px solid var(--line);
+    background: white;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.1s;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .pill:hover { border-color: var(--ink); }
+  .pill.active {
+    background: var(--ink);
+    color: white;
+    border-color: var(--ink);
+  }
+  .pill-deep.active { background: var(--depth-deep); border-color: var(--depth-deep); }
+  .pill-medium.active { background: var(--depth-medium); border-color: var(--depth-medium); }
+  .pill-shallow.active { background: var(--depth-shallow); border-color: var(--depth-shallow); }
+  .pill-rest.active { background: var(--depth-rest); border-color: var(--depth-rest); }
+  .pill-blocker.active { background: var(--depth-blocker); border-color: var(--depth-blocker); }
+  .pill-noise.active { background: var(--depth-noise); border-color: var(--depth-noise); }
+  .scroll-shadow {
+    background:
+      linear-gradient(white 30%, rgba(255,255,255,0)),
+      linear-gradient(rgba(255,255,255,0), white 70%) 0 100%,
+      radial-gradient(farthest-side at 50% 0, rgba(0,0,0,0.08), rgba(0,0,0,0)),
+      radial-gradient(farthest-side at 50% 100%, rgba(0,0,0,0.08), rgba(0,0,0,0)) 0 100%;
+    background-repeat: no-repeat;
+    background-size: 100% 30px, 100% 30px, 100% 12px, 100% 12px;
+    background-attachment: local, local, scroll, scroll;
+  }
+  /* Bottom sheet animation */
+  .sheet-enter { transform: translateY(100%); }
+  .sheet-enter-active { transform: translateY(0); transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+  .sheet-leave-active { transform: translateY(100%); transition: transform 0.18s ease-in; }
+  /* Hide scrollbar on chip rows */
+  .chip-row::-webkit-scrollbar { display: none; }
+  .chip-row { scrollbar-width: none; }
+  /* Diagnostic ring */
+  .ring-bg { stroke: var(--line); }
+  .ring-fg { stroke: var(--accent); transition: stroke-dashoffset 0.4s ease; }
+  /* Reset button look */
+  button { -webkit-tap-highlight-color: transparent; }
+</style>
+</head>
+<body class="min-h-screen pb-24">
+
+<!-- =========================================
+     HEADER
+========================================== -->
+<header class="sticky top-0 z-30 bg-[var(--bg)] border-b border-[var(--line)] backdrop-blur" style="background: rgba(250, 250, 247, 0.92);">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+    <div class="flex items-baseline gap-2 flex-1 min-w-0">
+      <h1 class="font-serif-tc text-xl sm:text-2xl font-bold tracking-tight">時間診斷師</h1>
+      <span class="text-[10px] font-mono text-[var(--ink-soft)] border border-[var(--line)] rounded px-1.5 py-0.5">v1.0.2</span>
+      <span class="text-xs text-[var(--ink-soft)] hidden sm:inline">15 分鐘卡片紀錄系統</span>
+    </div>
+    <select id="roleSelect" class="text-sm border border-[var(--line)] rounded-lg px-3 py-1.5 bg-white"></select>
+  </div>
+  <!-- Tabs -->
+  <div class="max-w-5xl mx-auto px-4 flex gap-1">
+    <button data-tab="today" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-[var(--ink)]">今日紀錄</button>
+    <button data-tab="report" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-[var(--ink-soft)]">日報分析</button>
+    <div class="ml-auto flex items-center gap-2 py-1.5">
+      <button id="dateBtn" class="text-xs font-mono text-[var(--ink-soft)] border border-[var(--line)] rounded-md px-2.5 py-1 bg-white">今天</button>
+    </div>
+  </div>
+</header>
+
+<!-- =========================================
+     TODAY VIEW
+========================================== -->
+<main id="todayView" class="max-w-5xl mx-auto px-4 py-5">
+  <!-- Status strip -->
+  <div class="bg-white border border-[var(--line)] rounded-2xl p-4 sm:p-5 mb-5 flex items-center gap-5">
+    <!-- Ring -->
+    <div class="relative flex-shrink-0">
+      <svg width="72" height="72" viewBox="0 0 72 72" class="-rotate-90">
+        <circle class="ring-bg" cx="36" cy="36" r="30" fill="none" stroke-width="6"/>
+        <circle id="completionRing" class="ring-fg" cx="36" cy="36" r="30" fill="none" stroke-width="6" stroke-dasharray="188.5" stroke-dashoffset="188.5" stroke-linecap="round"/>
+      </svg>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <span id="completionPct" class="font-mono text-sm font-bold">0%</span>
+      </div>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="text-xs text-[var(--ink-soft)] uppercase tracking-wide">今日完成率</div>
+      <div class="font-mono text-2xl font-bold" id="completionCount">0 / 48</div>
+      <div class="text-xs text-[var(--ink-soft)] mt-0.5"><span id="roleHint">總經理</span> · <span id="todayDate" class="font-mono"></span></div>
+    </div>
+    <!-- Productivity score -->
+    <div class="hidden sm:block text-right border-l border-[var(--line)] pl-5">
+      <div class="text-xs text-[var(--ink-soft)] uppercase tracking-wide">生產力分數</div>
+      <div class="font-mono text-2xl font-bold" id="productivityScore">0.00</div>
+      <div class="text-xs text-[var(--ink-soft)] mt-0.5">duration × depth</div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="chip-row flex gap-2 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
+    <span class="pill" style="background: var(--depth-deep); color: white; border-color: var(--depth-deep);">深度 +3</span>
+    <span class="pill" style="background: var(--depth-medium); color: white; border-color: var(--depth-medium);">中度 +2</span>
+    <span class="pill" style="background: var(--depth-shallow); color: white; border-color: var(--depth-shallow);">淺度 +1</span>
+    <span class="pill" style="background: var(--depth-blocker); color: white; border-color: var(--depth-blocker);">阻礙 -1</span>
+    <span class="pill" style="background: var(--depth-noise); color: white; border-color: var(--depth-noise);">雜訊 -2</span>
+    <span class="pill" style="background: var(--depth-rest); color: white; border-color: var(--depth-rest);">休息(主類)</span>
+  </div>
+
+  <!-- Hourly card grid -->
+  <div id="hourGrid" class="space-y-3"></div>
+
+  <!-- Finish today section -->
+  <div id="finishSection" class="mt-6">
+    <button id="finishTodayBtn" class="w-full bg-[var(--ink)] text-white rounded-2xl py-4 px-5 font-bold text-base shadow-md hover:bg-black active:scale-[0.99] transition">
+      <span id="finishBtnLabel">✓  完成今日紀錄</span>
+    </button>
+    <p id="finishHint" class="text-xs text-[var(--ink-soft)] text-center mt-3">完成後將鎖定當日資料並產出日報</p>
+  </div>
+</main>
+
+<!-- =========================================
+     REPORT VIEW
+========================================== -->
+<main id="reportView" class="max-w-5xl mx-auto px-4 py-5 hidden">
+  <!-- Finish banner (動態插入) -->
+  <div id="reportFinishBanner"></div>
+
+  <!-- Headline metrics -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white border border-[var(--line)] rounded-xl p-3">
+      <div class="text-xs text-[var(--ink-soft)]">完成率</div>
+      <div class="font-mono text-xl font-bold mt-1" id="r_completion">0%</div>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-3">
+      <div class="text-xs text-[var(--ink-soft)]">深度工作</div>
+      <div class="font-mono text-xl font-bold mt-1" id="r_deep">0h</div>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-3">
+      <div class="text-xs text-[var(--ink-soft)]">生產力分數</div>
+      <div class="font-mono text-xl font-bold mt-1" id="r_score">0.00</div>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-3">
+      <div class="text-xs text-[var(--ink-soft)]">可釋放產能</div>
+      <div class="font-mono text-xl font-bold mt-1" id="r_release">0h</div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <div class="text-sm font-bold mb-3">時間分布</div>
+      <canvas id="chartDepth" height="200"></canvas>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <div class="text-sm font-bold mb-3">工作主類分布</div>
+      <canvas id="chartCategory" height="200"></canvas>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <div class="text-sm font-bold mb-3">下一步動作統計</div>
+      <canvas id="chartNextAction" height="200"></canvas>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <div class="text-sm font-bold mb-3">能量 × 工作深度</div>
+      <canvas id="chartEnergyDepth" height="200"></canvas>
+    </div>
+  </div>
+
+  <div id="reportEmpty" class="hidden text-center py-16 text-[var(--ink-soft)]">
+    <div class="text-sm">今日尚無紀錄</div>
+    <div class="text-xs mt-1">回到「今日紀錄」開始填卡</div>
+  </div>
+</main>
+
+<!-- =========================================
+     BOTTOM SHEET / MODAL
+========================================== -->
+<div id="sheetBackdrop" class="fixed inset-0 bg-black/40 z-40 hidden" style="touch-action: none;"></div>
+<div id="sheet" class="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl hidden max-h-[92vh] flex flex-col sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:max-w-lg sm:w-[92vw]">
+  <!-- Handle -->
+  <div class="flex-shrink-0 pt-2 pb-1 flex justify-center sm:hidden">
+    <div class="w-10 h-1 bg-gray-300 rounded-full"></div>
+  </div>
+  <!-- Header -->
+  <div class="flex-shrink-0 px-5 pt-3 pb-3 border-b border-[var(--line)] flex items-center gap-3">
+    <div class="flex-1">
+      <div class="text-xs text-[var(--ink-soft)]">填寫卡片</div>
+      <div id="sheetTime" class="font-mono text-lg font-bold">--:-- – --:--</div>
+    </div>
+    <button id="copyPrevBtn" class="text-xs border border-[var(--line)] rounded-lg px-2.5 py-1.5 hover:bg-gray-50">複製上張</button>
+    <button id="closeSheet" class="text-2xl text-[var(--ink-soft)] leading-none px-1">×</button>
+  </div>
+  <!-- Body (scrollable) -->
+  <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4 scroll-shadow">
+    <!-- 工作深度 -->
+    <section id="depthSection">
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">工作深度</label>
+      <div class="flex flex-wrap gap-2 mt-2" id="depthOpts"></div>
+    </section>
+
+    <!-- 工作主類 → 子類 → 卡片 -->
+    <section>
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">工作主類</label>
+      <div class="chip-row flex gap-2 mt-2 overflow-x-auto -mx-5 px-5 pb-1" id="categoryOpts"></div>
+    </section>
+    <section id="subcategorySection" class="hidden">
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">工作子類</label>
+      <div class="chip-row flex gap-2 mt-2 overflow-x-auto -mx-5 px-5 pb-1" id="subcategoryOpts"></div>
+    </section>
+    <section id="cardSection" class="hidden">
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">工作卡片</label>
+      <div class="flex flex-wrap gap-2 mt-2" id="cardOpts"></div>
+    </section>
+
+    <!-- 能量 -->
+    <section>
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">能量狀態</label>
+      <div class="flex flex-wrap gap-2 mt-2" id="energyOpts"></div>
+    </section>
+
+    <!-- 下一步動作 -->
+    <section>
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">下一步動作</label>
+      <div class="flex flex-wrap gap-2 mt-2" id="nextActionOpts"></div>
+    </section>
+
+    <!-- 打斷 -->
+    <section>
+      <label class="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wide">是否被打斷</label>
+      <div class="flex flex-wrap gap-2 mt-2" id="interruptionOpts"></div>
+    </section>
+  </div>
+  <!-- Footer actions -->
+  <div class="flex-shrink-0 px-5 py-3 border-t border-[var(--line)] flex gap-2 bg-white">
+    <button id="deleteBtn" class="text-sm border border-[var(--line)] rounded-lg px-3 py-2 text-[var(--ink-soft)] hover:bg-gray-50 hidden">清除</button>
+    <div class="flex-1"></div>
+    <button id="batchHourBtn" class="text-sm border border-[var(--line)] rounded-lg px-3 py-2 hover:bg-gray-50">套用整小時</button>
+    <button id="saveBtn" class="text-sm bg-[var(--ink)] text-white rounded-lg px-4 py-2 font-bold">儲存</button>
+  </div>
+</div>
+
+<!-- =========================================
+     FINISH TODAY MODAL
+========================================== -->
+<div id="finishBackdrop" class="fixed inset-0 bg-black/40 z-40 hidden"></div>
+<div id="finishModal" class="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 bg-white rounded-3xl shadow-2xl hidden sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-md sm:w-[92vw] overflow-hidden">
+  <div class="px-6 pt-7 pb-5 text-center">
+    <div class="text-xs font-mono text-[var(--ink-soft)] tracking-widest mb-3">END  OF  DAY</div>
+    <div class="font-serif-tc text-2xl font-bold mb-5">完成今日紀錄</div>
+    <!-- 理念 -->
+    <blockquote class="relative text-[15px] leading-[1.9] text-[var(--ink)] mx-2 mb-6 py-3 border-y border-[var(--line)] font-serif-tc">
+      我們追求<span class="text-[var(--accent)] font-bold">深度工作</span>,
+      不被打斷;<br>
+      用<span class="text-[var(--accent)] font-bold">聰明的方式</span>工作,
+      而非更努力;<br>
+      鼓勵<span class="text-[var(--accent)] font-bold">專注與聚焦</span>,
+      強化每一分鐘的生產力。
+    </blockquote>
+    <!-- 今日數字 -->
+    <div class="grid grid-cols-2 gap-2 mb-5">
+      <div class="bg-[var(--bg)] rounded-lg p-2.5">
+        <div class="text-[10px] text-[var(--ink-soft)] uppercase tracking-wide">填寫</div>
+        <div class="font-mono text-base font-bold" id="finishFilled">0 / 48</div>
+      </div>
+      <div class="bg-[var(--bg)] rounded-lg p-2.5">
+        <div class="text-[10px] text-[var(--ink-soft)] uppercase tracking-wide">生產力分數</div>
+        <div class="font-mono text-base font-bold" id="finishScore">0.00</div>
+      </div>
+    </div>
+    <p class="text-xs text-[var(--ink-soft)] mb-5">確認後將鎖定今日資料,並切換到日報分析頁。<br>稍後仍可解鎖修改。</p>
+  </div>
+  <div class="border-t border-[var(--line)] flex">
+    <button id="finishCancelBtn" class="flex-1 py-4 text-sm text-[var(--ink-soft)] hover:bg-gray-50">取消</button>
+    <div class="w-px bg-[var(--line)]"></div>
+    <button id="finishConfirmBtn" class="flex-1 py-4 text-sm font-bold text-[var(--accent)] hover:bg-red-50">確認完成</button>
+  </div>
+</div>
+
+<!-- =========================================
+     TOAST
+========================================== -->
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--ink)] text-white text-sm px-4 py-2 rounded-full z-[100] opacity-0 pointer-events-none transition-opacity duration-200"></div>
+
+<script>
+/* ============================================================
+   時間診斷師 — Prototype
+   資料儲存：localStorage（key: td_logs_v1）
+   Stage 2 將切換為 Google Sheet via GAS
+============================================================ */
+
+/* -----------  共用選項定義  ----------- */
+const DEPTHS = [
+  { id: 'deep',     name: '深度', score:  3, cssClass: 'card-deep',     pillClass: 'pill-deep' },
+  { id: 'medium',   name: '中度', score:  2, cssClass: 'card-medium',   pillClass: 'pill-medium' },
+  { id: 'shallow',  name: '淺度', score:  1, cssClass: 'card-shallow',  pillClass: 'pill-shallow' },
+  { id: 'blocker',  name: '阻礙', score: -1, cssClass: 'card-blocker',  pillClass: 'pill-blocker' },
+  { id: 'noise',    name: '雜訊', score: -2, cssClass: 'card-noise',    pillClass: 'pill-noise' },
+];
+// 休息已從工作深度轉到工作主類「休息」,所有角色共用
+const REST_CATEGORY = {
+  name: '休息',
+  subs: [
+    { name: '活動',  cards: ['散步', '伸展', '走動', '爬樓梯', '快速運動'] },
+    { name: '飲食',  cards: ['早餐', '午餐', '晚餐', '點心時間', '咖啡時間', '飲水'] },
+    { name: '放空',  cards: ['發呆', '看窗外', '閉眼休息', '深呼吸', '冥想'] },
+    { name: '私事',  cards: ['私人通話', '家庭事務', '醫療/銀行', '其他私事'] },
+  ],
+};
+function isRest(log) { return log && log.category === '休息'; }
+const ENERGIES = [
+  { id: 'high', name: '高', score: 3 },
+  { id: 'medium', name: '中', score: 2 },
+  { id: 'low', name: '低', score: 1 },
+  { id: 'depleted', name: '耗竭', score: 0 },
+];
+const NEXT_ACTIONS = ['繼續', '完成關閉', '排程', '委派', '等待', '求助', '合併批次', '刪除停止', '建立 SOP'];
+const INTERRUPTIONS = ['無', '1 次', '2–3 次', '4 次以上'];
+const RELEASE_ACTIONS = new Set(['委派', '合併批次', '刪除停止', '建立 SOP']);
+
+/* -----------  4 角色 + 工作分類 seed data
+   來源：需求書第 10 章
+----------- */
+const ROLES = {
+  boss: {
+    id: 'boss', name: '總經理',
+    categories: [
+      { name: '策略', subs: [
+        { name: '公司策略', cards: ['年度方向', '商業模式', '成長策略', '資源配置'] },
+        { name: '產品策略', cards: ['新品方向', '產品組合', '毛利結構', '規格決策'] },
+        { name: '通路策略', cards: ['電商策略', '經銷策略', '百貨超市', 'B2B 通路'] },
+        { name: '品牌策略', cards: ['品牌定位', '內容方向', '活動策略', '定價策略'] },
+        { name: '投資策略', cards: ['資本支出', '設備投資', '資產配置', '風險控管'] },
+      ]},
+      { name: '決策', subs: [
+        { name: '高風險決策', cards: ['人事決策', '價格決策', '合約決策', '投資決策'] },
+        { name: '資源分配', cards: ['預算分配', '人力配置', '時間配置', '庫存配置'] },
+        { name: '例外處理', cards: ['客訴決策', '重大異常', '跨部門衝突', '緊急事件'] },
+        { name: '取捨判斷', cards: ['取消事項', '暫緩事項', '優先順序', '機會成本'] },
+      ]},
+      { name: '管理', subs: [
+        { name: '組織設計', cards: ['權責分工', '組織架構', '職務設計', 'RACI'] },
+        { name: '授權管理', cards: ['委派事項', '授權範圍', '審核節點', '主管培養'] },
+        { name: '流程管理', cards: ['SOP 設計', '流程改善', '跨部門流程', '例外流程'] },
+        { name: '績效管理', cards: ['KPI 設計', '目標追蹤', '績效檢討', '主管回報'] },
+        { name: '人才管理', cards: ['面試', '培訓', '主管溝通', '人員問題處理'] },
+      ]},
+      { name: '財務', subs: [
+        { name: '經營數字', cards: ['月報檢視', '毛利分析', '費用分析', '現金流'] },
+        { name: '預算管理', cards: ['預算審核', '費用核准', '採購決策', '投資評估'] },
+        { name: '帳務決策', cards: ['應收應付', '付款審核', '稅務討論', '會計師溝通'] },
+        { name: '成本管理', cards: ['生產成本', '庫存金額', '耗損分析', '價格試算'] },
+      ]},
+      { name: '溝通', subs: [
+        { name: '主管溝通', cards: ['生產主管', '財務行政', '製造課長', '行銷業務'] },
+        { name: '外部溝通', cards: ['顧問', '會計師', '律師', '供應商', '合作夥伴'] },
+        { name: '關鍵客戶', cards: ['大客戶溝通', '經銷商溝通', '客訴安撫', '合作洽談'] },
+        { name: '臨時溝通', cards: ['臨時插單', '突發詢問', '即時協調', '問題追問'] },
+      ]},
+      { name: '會議', subs: [
+        { name: '策略會議', cards: ['年度策略', '產品策略', '通路策略', '投資討論'] },
+        { name: '管理會議', cards: ['主管會議', '跨部門會議', '進度檢討'] },
+        { name: '財務會議', cards: ['月報會議', '成本會議', '預算會議'] },
+        { name: '人事會議', cards: ['面試', '績效討論', '組織調整'] },
+        { name: '臨時會議', cards: ['緊急會議', '異常會議', '客訴會議'] },
+      ]},
+      { name: '研究', subs: [
+        { name: '市場研究', cards: ['市場趨勢', '競品研究', '價格研究', '通路研究'] },
+        { name: '管理學習', cards: ['制度學習', '案例研究', '方法論整理'] },
+        { name: '資料分析', cards: ['數據檢視', '報表分析', '問題拆解'] },
+      ]},
+      { name: '行政', subs: [
+        { name: '必要簽核', cards: ['付款審核', '合約確認', '文件確認', '採購確認'] },
+      ]},
+    ],
+  },
+
+  production: {
+    id: 'production', name: '生產管理',
+    categories: [
+      { name: '管理', subs: [
+        { name: '生產排程', cards: ['生產排程', '產能安排', '品項安排', '出貨安排'] },
+        { name: '工作分配', cards: ['人員安排', '工作分配', '進度追蹤', '加班安排'] },
+        { name: '異常排除', cards: ['缺料處理', '設備異常', '品質異常', '交期異常'] },
+        { name: '流程改善', cards: ['流程檢討', 'SOP 修正', '效率改善', '瓶頸排除'] },
+      ]},
+      { name: '現場', subs: [
+        { name: '巡查', cards: ['生產巡查', '庫存巡查', '冷凍庫巡查', '設備巡查', '衛生巡查'] },
+        { name: '現場協調', cards: ['現場協調', '人員支援', '動線確認', '產線確認'] },
+        { name: '品質異常', cards: ['品質檢查', '異常回報', '返工處理', '報廢確認', '原因追蹤'] },
+      ]},
+      { name: '行政', subs: [
+        { name: '盤點', cards: ['庫存盤點', '物料盤點', '包材盤點', '差異確認'] },
+        { name: '資料整理', cards: ['生產資料整理', '庫存資料整理', '出貨資料整理', '損耗資料整理'] },
+      ]},
+      { name: '溝通', subs: [
+        { name: '跨部門溝通', cards: ['生產與業務確認', '倉庫與生產確認', '財務與生產確認'] },
+        { name: '廠商往來', cards: ['廠商聯繫', '交期確認', '原料確認', '包材確認'] },
+      ]},
+      { name: '會議', subs: [
+        { name: '生產會議', cards: ['生產會議', '跨部門會議', '臨時會議', '異常會議'] },
+      ]},
+      { name: '財務', subs: [
+        { name: '成本資料', cards: ['成本資料整理', '庫存金額資料', '異常損耗資料'] },
+      ]},
+    ],
+  },
+
+  finance: {
+    id: 'finance', name: '財務行政',
+    categories: [
+      { name: '財務', subs: [
+        { name: '對帳', cards: ['銀行對帳', '客戶對帳', '供應商對帳', '平台對帳'] },
+        { name: '付款', cards: ['付款資料整理', '付款清冊', '匯款確認', '付款審核'] },
+        { name: '發票', cards: ['發票整理', '發票確認', '進項發票', '銷項發票', '折讓處理'] },
+        { name: '帳務', cards: ['應收帳款', '應付帳款', '費用登錄', '薪資資料', '月結資料'] },
+        { name: '報表', cards: ['現金流整理', '費用統計', '成本資料', '會計師資料準備'] },
+        { name: '異常處理', cards: ['金額差異', '資料缺漏', '憑證缺漏', '重複付款檢查'] },
+      ]},
+      { name: '行政', subs: [
+        { name: '一般行政', cards: ['文件整理', '資料歸檔', '表單填寫', '排程安排', '資料查找'] },
+        { name: '電話', cards: ['接聽電話', '撥打電話', '電話確認', '電話轉達'] },
+        { name: '廠商往來', cards: ['廠商資料確認', '廠商聯繫', '報價確認', '合約資料確認', '交期確認'] },
+        { name: '盤點', cards: ['庫存盤點', '物料盤點', '包材盤點', '文件盤點', '差異確認'] },
+        { name: '日常庶務', cards: ['辦公室庶務', '設備叫修', '用品補充', '臨時行政支援'] },
+      ]},
+      { name: '溝通', subs: [
+        { name: '內部溝通', cards: ['主管溝通', '部門協調', '工作交辦', '進度確認'] },
+        { name: '外部溝通', cards: ['會計師聯繫', '廠商聯繫', '物流聯繫', '客戶聯繫'] },
+        { name: '問題確認', cards: ['資料追問', '責任確認', '異常說明', '待回覆追蹤'] },
+      ]},
+      { name: '管理', subs: [
+        { name: '流程管理', cards: ['流程整理', '資料檢查', '權責確認', 'SOP 建立'] },
+      ]},
+      { name: '會議', subs: [
+        { name: '財務會議', cards: ['財務會議', '行政會議', '臨時會議', '月結會議'] },
+      ]},
+    ],
+  },
+
+  chief: {
+    id: 'chief', name: '製造課長',
+    categories: [
+      { name: '現場', subs: [
+        { name: '現場管理', cards: ['人員安排', '工作分配', '進度確認', '現場協調', '異常排除'] },
+        { name: '現場工作', cards: ['加工協助', '包裝協助', '搬運協助', '出貨協助', '設備操作'] },
+        { name: '清潔打掃', cards: ['環境清潔', '設備清潔', '器具清潔', '地面清潔', '廢棄物處理'] },
+        { name: '日常工作', cards: ['開工準備', '收工整理', '例行檢查', '工具準備', '物料準備'] },
+        { name: '巡查', cards: ['生產巡查', '庫存巡查', '冷凍庫巡查', '設備巡查', '衛生巡查'] },
+        { name: '品質異常', cards: ['品質檢查', '異常回報', '返工處理', '報廢確認', '原因追蹤'] },
+        { name: '安全衛生', cards: ['溫度確認', '清潔紀錄', '衛生紀錄', '安全檢查'] },
+      ]},
+      { name: '管理', subs: [
+        { name: '人員管理', cards: ['人員安排', '工作分配', '進度確認', '教育訓練'] },
+        { name: '異常處理', cards: ['異常排除', '問題回報', '原因追蹤', '改善確認'] },
+      ]},
+      { name: '溝通', subs: [
+        { name: '內部溝通', cards: ['生產管理溝通', '現場交辦', '主管回報', '同仁協調'] },
+      ]},
+      { name: '行政', subs: [
+        { name: '現場紀錄', cards: ['清潔紀錄', '盤點紀錄', '物料確認', '設備紀錄'] },
+      ]},
+      { name: '會議', subs: [
+        { name: '現場會議', cards: ['晨會', '現場會議', '臨時會議', '異常會議'] },
+      ]},
+    ],
+  },
+};
+
+/* -----------  時間設定 ----------- */
+const START_HOUR = 8;
+const END_HOUR = 20;            // 08:00–20:00, 12h * 4 = 48 卡
+const SLOTS_PER_HOUR = 4;
+const TOTAL_SLOTS = (END_HOUR - START_HOUR) * SLOTS_PER_HOUR;
+const SLOT_DURATION = 0.25;
+
+/* -----------  狀態 ----------- */
+const STORAGE_KEY = 'td_logs_v1';
+const PREFS_KEY = 'td_prefs_v1';
+const FINISHED_KEY = 'td_finished_v1';
+
+const state = {
+  role: null,            // role id
+  date: todayISO(),      // YYYY-MM-DD
+  logs: {},              // { 'role|date|HH:MM': logObject }
+  finished: {},          // { 'role|date': isoTimestamp }
+  currentSlot: null,     // editing slot
+  draft: null,           // editing draft
+  tab: 'today',
+};
+
+/* -----------  Init ----------- */
+function init() {
+  // 注入「休息」主類給所有角色(共用)
+  Object.values(ROLES).forEach(r => {
+    if (!r.categories.find(c => c.name === '休息')) {
+      r.categories.push(REST_CATEGORY);
+    }
+  });
+
+  // Read role from URL ?role=xxx, else from prefs, else 'boss'
+  const urlRole = new URLSearchParams(location.search).get('role');
+  const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+  state.role = ROLES[urlRole] ? urlRole : (ROLES[prefs.role] ? prefs.role : 'boss');
+
+  // Load logs + finished
+  state.logs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  state.finished = JSON.parse(localStorage.getItem(FINISHED_KEY) || '{}');
+
+  buildRoleSelect();
+  bindHeader();
+  bindSheet();
+  bindFinish();
+  bindTabs();
+  render();
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtTime(h, m) {
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function logKey(role, date, time) { return `${role}|${date}|${time}`; }
+function finishKey(role, date) { return `${role}|${date}`; }
+
+function getLog(time) { return state.logs[logKey(state.role, state.date, time)]; }
+function setLog(time, log) {
+  const k = logKey(state.role, state.date, time);
+  if (log === null) delete state.logs[k];
+  else state.logs[k] = log;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.logs));
+}
+
+function isDayFinished() { return !!state.finished[finishKey(state.role, state.date)]; }
+function setDayFinished(timestamp) {
+  const k = finishKey(state.role, state.date);
+  if (timestamp === null) delete state.finished[k];
+  else state.finished[k] = timestamp;
+  localStorage.setItem(FINISHED_KEY, JSON.stringify(state.finished));
+}
+
+/* -----------  Role select / Tabs ----------- */
+function buildRoleSelect() {
+  const sel = document.getElementById('roleSelect');
+  sel.innerHTML = Object.values(ROLES).map(r =>
+    `<option value="${r.id}" ${r.id === state.role ? 'selected' : ''}>${r.name}</option>`
+  ).join('');
+  sel.addEventListener('change', e => {
+    state.role = e.target.value;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ role: state.role }));
+    // update URL silently
+    const url = new URL(location);
+    url.searchParams.set('role', state.role);
+    history.replaceState(null, '', url);
+    render();
+  });
+}
+
+function bindTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        const active = b.dataset.tab === state.tab;
+        b.classList.toggle('border-[var(--ink)]', active);
+        b.classList.toggle('border-transparent', !active);
+        b.classList.toggle('text-[var(--ink-soft)]', !active);
+      });
+      document.getElementById('todayView').classList.toggle('hidden', state.tab !== 'today');
+      document.getElementById('reportView').classList.toggle('hidden', state.tab !== 'report');
+      if (state.tab === 'report') renderReport();
+    });
+  });
+}
+
+function bindHeader() {
+  document.getElementById('dateBtn').addEventListener('click', () => {
+    const input = prompt('輸入日期 (YYYY-MM-DD)，或留空回到今天', state.date);
+    if (input === null) return;
+    if (input.trim() === '') {
+      state.date = todayISO();
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
+      state.date = input.trim();
+    } else {
+      toast('日期格式錯誤');
+      return;
+    }
+    render();
+  });
+}
+
+/* -----------  Render ----------- */
+function render() {
+  document.getElementById('roleHint').textContent = ROLES[state.role].name;
+  document.getElementById('todayDate').textContent = state.date === todayISO() ? `今天 ${state.date}` : state.date;
+  document.getElementById('dateBtn').textContent = state.date === todayISO() ? '今天' : state.date;
+
+  renderHourGrid();
+  renderStatusStrip();
+  if (state.tab === 'report') renderReport();
+}
+
+function renderStatusStrip() {
+  let filled = 0, prodScore = 0;
+  for (let h = START_HOUR; h < END_HOUR; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const log = getLog(fmtTime(h, m));
+      if (log) {
+        filled++;
+        // 休息卡片 = 0 分;其他依工作深度計算
+        if (!isRest(log)) {
+          prodScore += SLOT_DURATION * (DEPTHS.find(d => d.id === log.depth)?.score || 0);
+        }
+      }
+    }
+  }
+  const pct = TOTAL_SLOTS ? Math.round(filled / TOTAL_SLOTS * 100) : 0;
+  document.getElementById('completionPct').textContent = pct + '%';
+  document.getElementById('completionCount').textContent = `${filled} / ${TOTAL_SLOTS}`;
+  document.getElementById('productivityScore').textContent = prodScore.toFixed(2);
+  const circumference = 2 * Math.PI * 30;
+  document.getElementById('completionRing').style.strokeDasharray = circumference;
+  document.getElementById('completionRing').style.strokeDashoffset = circumference * (1 - pct / 100);
+
+  // 完成按鈕狀態
+  const finished = isDayFinished();
+  const btn = document.getElementById('finishTodayBtn');
+  const lbl = document.getElementById('finishBtnLabel');
+  const hint = document.getElementById('finishHint');
+  if (finished) {
+    btn.classList.remove('bg-[var(--ink)]', 'hover:bg-black');
+    btn.classList.add('bg-white', 'border-2', 'border-[var(--depth-rest)]', 'text-[var(--depth-rest)]');
+    const ts = state.finished[finishKey(state.role, state.date)];
+    const tm = ts ? new Date(ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    lbl.textContent = `✓  已完成 · ${tm} 結算`;
+    hint.textContent = '點此重新編輯今日資料';
+  } else {
+    btn.classList.add('bg-[var(--ink)]', 'hover:bg-black');
+    btn.classList.remove('bg-white', 'border-2', 'border-[var(--depth-rest)]', 'text-[var(--depth-rest)]');
+    lbl.textContent = '✓  完成今日紀錄';
+    hint.textContent = '完成後將鎖定當日資料並產出日報';
+  }
+}
+
+function renderHourGrid() {
+  const grid = document.getElementById('hourGrid');
+  let html = '';
+  for (let h = START_HOUR; h < END_HOUR; h++) {
+    html += `<div class="bg-white border border-[var(--line)] rounded-2xl p-3 sm:p-4">`;
+    html += `<div class="flex items-center gap-2 mb-2">`;
+    html += `  <div class="font-mono text-sm font-bold">${String(h).padStart(2,'0')}:00</div>`;
+    html += `  <div class="h-px bg-[var(--line)] flex-1"></div>`;
+    // hour completion
+    let hf = 0;
+    for (let m = 0; m < 60; m += 15) if (getLog(fmtTime(h, m))) hf++;
+    html += `  <div class="text-xs text-[var(--ink-soft)] font-mono">${hf}/4</div>`;
+    html += `</div>`;
+    html += `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">`;
+    for (let m = 0; m < 60; m += 15) {
+      const time = fmtTime(h, m);
+      const endTime = fmtTime(h + Math.floor((m + 15) / 60), (m + 15) % 60);
+      const log = getLog(time);
+      let cls = 'card-empty';
+      if (log) {
+        cls = isRest(log) ? 'card-rest' : (DEPTHS.find(d => d.id === log.depth)?.cssClass || 'card-empty');
+      }
+      const label = log ? (log.cardName || log.subcategory || '已填') : '';
+      html += `<button type="button" class="card ${cls} rounded-xl p-2.5 text-left h-[68px] sm:h-[80px] flex flex-col justify-between overflow-hidden" data-time="${time}" data-endtime="${endTime}">`;
+      html += `  <div class="font-mono text-[11px] opacity-80">${time}</div>`;
+      html += `  <div class="text-[12px] sm:text-[13px] leading-tight font-medium line-clamp-2">${label}</div>`;
+      html += `</button>`;
+    }
+    html += `</div></div>`;
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('.card').forEach(c => {
+    c.addEventListener('click', () => openSheet(c.dataset.time, c.dataset.endtime));
+  });
+}
+
+/* -----------  Sheet (Modal) ----------- */
+function openSheet(time, endTime) {
+  state.currentSlot = time;
+  const existing = getLog(time);
+  state.draft = existing ? { ...existing } : {
+    depth: null, category: null, subcategory: null, cardName: null,
+    energy: null, nextAction: null, interruption: null,
+  };
+  document.getElementById('sheetTime').textContent = `${time} – ${endTime}`;
+  document.getElementById('deleteBtn').classList.toggle('hidden', !existing);
+  renderSheet();
+  document.getElementById('sheetBackdrop').classList.remove('hidden');
+  document.getElementById('sheet').classList.remove('hidden');
+  // animation
+  const sheet = document.getElementById('sheet');
+  sheet.classList.add('sheet-enter');
+  requestAnimationFrame(() => {
+    sheet.classList.remove('sheet-enter');
+    sheet.classList.add('sheet-enter-active');
+  });
+}
+
+function closeSheet() {
+  document.getElementById('sheet').classList.add('hidden');
+  document.getElementById('sheetBackdrop').classList.add('hidden');
+  document.getElementById('sheet').classList.remove('sheet-enter-active', 'sheet-enter');
+  state.currentSlot = null;
+  state.draft = null;
+}
+
+function renderSheet() {
+  const d = state.draft;
+  const role = ROLES[state.role];
+
+  // 是否為休息卡片
+  const restMode = isRest(d);
+
+  // depth — 休息模式下隱藏
+  const depthSec = document.getElementById('depthSection');
+  if (restMode) {
+    depthSec.classList.add('hidden');
+    if (d.depth) d.depth = null;   // 清空深度
+  } else {
+    depthSec.classList.remove('hidden');
+    document.getElementById('depthOpts').innerHTML = DEPTHS.map(opt =>
+      `<button class="pill ${opt.pillClass} ${d.depth === opt.id ? 'active' : ''}" data-field="depth" data-val="${opt.id}">${opt.name}</button>`
+    ).join('');
+  }
+
+  // category
+  document.getElementById('categoryOpts').innerHTML = role.categories.map(c =>
+    `<button class="pill ${d.category === c.name ? 'active' : ''}" data-field="category" data-val="${c.name}">${c.name}</button>`
+  ).join('');
+
+  // subcategory
+  const subSec = document.getElementById('subcategorySection');
+  if (d.category) {
+    const cat = role.categories.find(c => c.name === d.category);
+    subSec.classList.remove('hidden');
+    document.getElementById('subcategoryOpts').innerHTML = cat.subs.map(s =>
+      `<button class="pill ${d.subcategory === s.name ? 'active' : ''}" data-field="subcategory" data-val="${s.name}">${s.name}</button>`
+    ).join('');
+  } else {
+    subSec.classList.add('hidden');
+  }
+
+  // card
+  const cardSec = document.getElementById('cardSection');
+  if (d.category && d.subcategory) {
+    const cat = role.categories.find(c => c.name === d.category);
+    const sub = cat.subs.find(s => s.name === d.subcategory);
+    cardSec.classList.remove('hidden');
+    document.getElementById('cardOpts').innerHTML = sub.cards.map(card =>
+      `<button class="pill ${d.cardName === card ? 'active' : ''}" data-field="cardName" data-val="${card}">${card}</button>`
+    ).join('');
+  } else {
+    cardSec.classList.add('hidden');
+  }
+
+  // energy
+  document.getElementById('energyOpts').innerHTML = ENERGIES.map(e =>
+    `<button class="pill ${d.energy === e.id ? 'active' : ''}" data-field="energy" data-val="${e.id}">${e.name}</button>`
+  ).join('');
+
+  // next action
+  document.getElementById('nextActionOpts').innerHTML = NEXT_ACTIONS.map(a =>
+    `<button class="pill ${d.nextAction === a ? 'active' : ''}" data-field="nextAction" data-val="${a}">${a}</button>`
+  ).join('');
+
+  // interruption
+  document.getElementById('interruptionOpts').innerHTML = INTERRUPTIONS.map(i =>
+    `<button class="pill ${d.interruption === i ? 'active' : ''}" data-field="interruption" data-val="${i}">${i}</button>`
+  ).join('');
+
+  // bind pills
+  document.querySelectorAll('#sheet .pill').forEach(p => {
+    p.addEventListener('click', () => {
+      const field = p.dataset.field;
+      const val = p.dataset.val;
+      // toggle (click same → null) — but for required fields like depth, keep selection
+      if (state.draft[field] === val && (field !== 'depth')) {
+        state.draft[field] = null;
+      } else {
+        state.draft[field] = val;
+      }
+      // cascade reset
+      if (field === 'category') { state.draft.subcategory = null; state.draft.cardName = null; }
+      if (field === 'subcategory') { state.draft.cardName = null; }
+      renderSheet();
+    });
+  });
+}
+
+function bindSheet() {
+  document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
+
+  document.getElementById('saveBtn').addEventListener('click', () => {
+    const d = state.draft;
+    if (!d.category) { toast('請選擇工作主類'); return; }
+    if (isRest(d)) {
+      if (!d.subcategory) { toast('請選擇休息類型'); return; }
+    } else {
+      if (!d.depth) { toast('請選擇工作深度'); return; }
+    }
+    setLog(state.currentSlot, d);
+    closeSheet();
+    render();
+    toast('已儲存');
+  });
+
+  document.getElementById('deleteBtn').addEventListener('click', () => {
+    if (!confirm('確定清除這張卡片？')) return;
+    setLog(state.currentSlot, null);
+    closeSheet();
+    render();
+    toast('已清除');
+  });
+
+  document.getElementById('copyPrevBtn').addEventListener('click', () => {
+    // find previous slot in time order (within today)
+    const [hh, mm] = state.currentSlot.split(':').map(Number);
+    let h = hh, m = mm;
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      m -= 15;
+      if (m < 0) { m = 45; h -= 1; }
+      if (h < START_HOUR) break;
+      const prev = getLog(fmtTime(h, m));
+      if (prev) {
+        state.draft = { ...prev };
+        renderSheet();
+        toast(`已複製 ${fmtTime(h, m)} 的卡片`);
+        return;
+      }
+    }
+    toast('沒有可複製的卡片');
+  });
+
+  document.getElementById('batchHourBtn').addEventListener('click', () => {
+    const d = state.draft;
+    if (!d.category) { toast('請先填寫，再套用整小時'); return; }
+    if (!isRest(d) && !d.depth) { toast('請先填寫工作深度'); return; }
+    const [hh] = state.currentSlot.split(':').map(Number);
+    if (!confirm(`將此卡片設定套用到 ${String(hh).padStart(2,'0')}:00 整個小時 4 張卡？`)) return;
+    for (let m = 0; m < 60; m += 15) {
+      setLog(fmtTime(hh, m), { ...d });
+    }
+    closeSheet();
+    render();
+    toast(`已套用整個 ${String(hh).padStart(2,'0')}:00`);
+  });
+}
+
+/* -----------  Finish today ----------- */
+function bindFinish() {
+  const openFinish = () => {
+    if (isDayFinished()) {
+      // 已完成 → 點按鈕意為「解鎖重新編輯」
+      if (confirm('今日已結算。確認重新開啟編輯？')) {
+        setDayFinished(null);
+        render();
+        toast('已解鎖');
+      }
+      return;
+    }
+    // 統計今日數字並填到 modal
+    let filled = 0, prodScore = 0;
+    for (let h = START_HOUR; h < END_HOUR; h++) {
+      for (let m = 0; m < 60; m += 15) {
+        const log = getLog(fmtTime(h, m));
+        if (log) {
+          filled++;
+          if (!isRest(log)) prodScore += SLOT_DURATION * (DEPTHS.find(d => d.id === log.depth)?.score || 0);
+        }
+      }
+    }
+    document.getElementById('finishFilled').textContent = `${filled} / ${TOTAL_SLOTS}`;
+    document.getElementById('finishScore').textContent = prodScore.toFixed(2);
+    document.getElementById('finishBackdrop').classList.remove('hidden');
+    document.getElementById('finishModal').classList.remove('hidden');
+  };
+
+  const closeFinish = () => {
+    document.getElementById('finishBackdrop').classList.add('hidden');
+    document.getElementById('finishModal').classList.add('hidden');
+  };
+
+  document.getElementById('finishTodayBtn').addEventListener('click', openFinish);
+  document.getElementById('finishCancelBtn').addEventListener('click', closeFinish);
+  document.getElementById('finishBackdrop').addEventListener('click', closeFinish);
+  document.getElementById('finishConfirmBtn').addEventListener('click', () => {
+    setDayFinished(new Date().toISOString());
+    closeFinish();
+    // 切換到日報 tab
+    state.tab = 'report';
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      const active = b.dataset.tab === 'report';
+      b.classList.toggle('border-[var(--ink)]', active);
+      b.classList.toggle('border-transparent', !active);
+      b.classList.toggle('text-[var(--ink-soft)]', !active);
+    });
+    document.getElementById('todayView').classList.add('hidden');
+    document.getElementById('reportView').classList.remove('hidden');
+    renderReport();
+    render();
+    toast('今日已結算 ✓');
+  });
+}
+
+/* -----------  Toast ----------- */
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 1800);
+}
+
+/* -----------  Report ----------- */
+let charts = {};
+function renderReport() {
+  const role = ROLES[state.role];
+  const logs = [];
+  for (let h = START_HOUR; h < END_HOUR; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const log = getLog(fmtTime(h, m));
+      if (log) logs.push(log);
+    }
+  }
+
+  // 結算狀態 banner
+  const banner = document.getElementById('reportFinishBanner');
+  if (banner) {
+    const finished = isDayFinished();
+    if (finished) {
+      const ts = state.finished[finishKey(state.role, state.date)];
+      const tm = new Date(ts).toLocaleString('zh-TW', { hour: '2-digit', minute: '2-digit', month: '2-digit', day: '2-digit', hour12: false });
+      banner.innerHTML = `<div class="flex items-center gap-2 bg-[var(--depth-rest)]/10 border border-[var(--depth-rest)] rounded-xl px-4 py-3 mb-5">
+        <span class="text-[var(--depth-rest)] font-bold text-lg">✓</span>
+        <div class="flex-1">
+          <div class="text-sm font-bold text-[var(--depth-rest)]">今日已結算</div>
+          <div class="text-xs text-[var(--ink-soft)] font-mono">${tm}</div>
+        </div>
+      </div>`;
+    } else {
+      banner.innerHTML = '';
+    }
+  }
+
+  const isEmpty = logs.length === 0;
+  document.getElementById('reportEmpty').classList.toggle('hidden', !isEmpty);
+  document.querySelectorAll('#reportView .grid').forEach(g => g.classList.toggle('hidden', isEmpty));
+
+  if (isEmpty) return;
+
+  // Headline metrics
+  const filled = logs.length;
+  const pct = Math.round(filled / TOTAL_SLOTS * 100);
+  const workLogs = logs.filter(l => !isRest(l));
+  const deepCount = workLogs.filter(l => l.depth === 'deep').length;
+  const prodScore = workLogs.reduce((s, l) => s + SLOT_DURATION * (DEPTHS.find(d => d.id === l.depth)?.score || 0), 0);
+  const releaseCount = logs.filter(l => RELEASE_ACTIONS.has(l.nextAction)).length;
+  document.getElementById('r_completion').textContent = pct + '%';
+  document.getElementById('r_deep').textContent = (deepCount * SLOT_DURATION).toFixed(2) + 'h';
+  document.getElementById('r_score').textContent = prodScore.toFixed(2);
+  document.getElementById('r_release').textContent = (releaseCount * SLOT_DURATION).toFixed(2) + 'h';
+
+  // Charts
+  drawTimeDistChart(logs);
+  drawCategoryChart(logs);
+  drawNextActionChart(logs);
+  drawEnergyDepthChart(workLogs);  // 能量×深度 只看工作卡片
+}
+
+function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+
+function drawTimeDistChart(logs) {
+  destroyChart('depth');
+  // 5 個工作深度 + 1 個休息 = 6 個 slice
+  const labels = [...DEPTHS.map(d => d.name), '休息'];
+  const counts = [
+    ...DEPTHS.map(d => logs.filter(l => !isRest(l) && l.depth === d.id).length * SLOT_DURATION),
+    logs.filter(l => isRest(l)).length * SLOT_DURATION,
+  ];
+  const colors = ['#DC2626', '#EA580C', '#2563EB', '#9333EA', '#6B7280', '#16A34A'];
+  charts.depth = new Chart(document.getElementById('chartDepth'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0 }] },
+    options: {
+      plugins: {
+        legend: { position: 'right' },
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(2)}h` } },
+      },
+      cutout: '60%'
+    }
+  });
+}
+
+function drawCategoryChart(logs) {
+  destroyChart('category');
+  const role = ROLES[state.role];
+  const labels = role.categories.map(c => c.name);
+  const data = labels.map(name => logs.filter(l => l.category === name).length * SLOT_DURATION);
+  charts.category = new Chart(document.getElementById('chartCategory'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: '#1F2937', borderRadius: 4 }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => v + 'h' } } } }
+  });
+}
+
+function drawNextActionChart(logs) {
+  destroyChart('next');
+  const labels = NEXT_ACTIONS;
+  const data = labels.map(a => logs.filter(l => l.nextAction === a).length);
+  const colors = labels.map(a => RELEASE_ACTIONS.has(a) ? '#B91C1C' : '#9CA3AF');
+  charts.next = new Chart(document.getElementById('chartNextAction'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y + ' 張' } } }, scales: { y: { ticks: { precision: 0 } } } }
+  });
+}
+
+function drawEnergyDepthChart(logs) {
+  destroyChart('ed');
+  const energyLabels = ['高', '中', '低', '耗竭'];
+  const energyIds = ['high', 'medium', 'low', 'depleted'];
+  // 每個深度作為一個 dataset,在能量軸上堆疊
+  const datasets = DEPTHS.map(d => ({
+    label: d.name,
+    data: energyIds.map(eId => {
+      const cnt = logs.filter(l => l.energy === eId && l.depth === d.id).length;
+      return cnt * SLOT_DURATION;
+    }),
+    backgroundColor: ['#DC2626', '#EA580C', '#2563EB', '#16A34A', '#9333EA', '#6B7280'][DEPTHS.indexOf(d)],
+    borderWidth: 0,
+  }));
+  charts.ed = new Chart(document.getElementById('chartEnergyDepth'), {
+    type: 'bar',
+    data: { labels: energyLabels, datasets },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(2)}h` } } },
+      scales: {
+        x: { stacked: true, title: { display: true, text: '能量狀態' } },
+        y: { stacked: true, ticks: { callback: v => v + 'h' } }
+      }
+    }
+  });
+}
+
+/* -----------  Boot ----------- */
+init();
+</script>
+</body>
+</html>

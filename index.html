@@ -466,9 +466,6 @@ function toast(msg, ms) {
    API client
 ============================================================ */
 async function apiGet(action, params) {
-  if (API_BASE === 'https://script.google.com/macros/s/AKfycbxctCMCtcKkDUgegpA3eN6UehmOxp65pobtq0Xv54YQFPuJlzyUUIPOVh5Xlr6bKs9YcQ/exec') {
-    throw new Error('API_BASE 未設定。請編輯 index.html 把 API_BASE 改為你的 Web App URL');
-  }
   const qs = new URLSearchParams(Object.assign({ action: action }, params || {}));
   const sep = API_BASE.includes('?') ? '&' : '?';
   const url = API_BASE + sep + qs.toString();
@@ -480,9 +477,6 @@ async function apiGet(action, params) {
 }
 
 async function apiPost(action, body) {
-  if (API_BASE === 'https://script.google.com/macros/s/AKfycbxctCMCtcKkDUgegpA3eN6UehmOxp65pobtq0Xv54YQFPuJlzyUUIPOVh5Xlr6bKs9YcQ/exec') {
-    throw new Error('API_BASE 未設定');
-  }
   const sep = API_BASE.includes('?') ? '&' : '?';
   const url = API_BASE + sep + 'action=' + encodeURIComponent(action);
   setSyncStatus('busy');
